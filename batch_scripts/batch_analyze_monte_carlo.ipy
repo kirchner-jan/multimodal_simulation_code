@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri May 14 09:19:44 2021
+
+@author: kirchnerj@MPIBR
+"""
+
+import numpy , os , matplotlib
+from scipy import stats
+from analysis.auxiliary_stats_functions import  compute_topography, common_elements
+import pylab as plt
+import matplotlib.cm as cm
+
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
+# defining things for the figures
+SMALL_SIZE = 12
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 16
+
+plt.rc('font',  size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes',  titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes',  labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend',  fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure',  titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+#%%
+# %matplotlib inline
+accSTATSList = []
+for foldername in os.listdir('simulations/monte_carlo/'):
+    for filename in os.listdir('simulations/monte_carlo/' + foldername):
+        if filename.endswith(".npy"): #  and (numpy.random.rand() < 0.05)
+            print(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , filename))
+            time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl = numpy.load(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , filename) , allow_pickle=True)
+            W_active_v1 = mats['W_v1'] > prms['W_thres'][1]/5
+            W_active_s1 = mats['W_s1'] > prms['W_thres'][1]/5
+            rf_vec_v1 = numpy.sum(W_active_v1, axis=1)
+            rf_vec_s1 = numpy.sum(W_active_s1, axis=1)
+            finite_rf_v1 = rf_vec_v1[numpy.where(rf_vec_v1>0)]
+            finite_rf_s1 = rf_vec_s1[numpy.where(rf_vec_s1>0)]
+            rf_size_v1 = numpy.mean(finite_rf_v1)
+            rf_size_s1 = numpy.mean(finite_rf_s1)
+            align_v1, align_s1, topo_v1, topo_s1, spars_v1, spars_s1 = compute_topography(W_active_v1, W_active_s1, prms['N_v1'])
+            v1_active = list(numpy.where(rf_vec_v1>0))
+            s1_active = list(numpy.where(rf_vec_s1>0))
+            v1_inactive = list(numpy.where(rf_vec_v1==0))
+            s1_inactive = list(numpy.where(rf_vec_s1==0))
+            bimodal_neurons = common_elements(v1_active[0], s1_active[0])
+            unimodal_v1 = common_elements(v1_active[0], s1_inactive[0])
+            unimodal_s1 = common_elements(s1_active[0], v1_inactive[0])
+            accSTATSList.append((prms['corr_thres'] , prms['spatio_temp_corr'] ,
+                              align_v1, align_s1, topo_v1, topo_s1, spars_v1, spars_s1,
+                              1.0*len(unimodal_v1)/prms['N_v1'], 
+                              1.0*len(unimodal_s1)/prms['N_v1'], 
+                              1.0*len(bimodal_neurons)/prms['N_v1'] , rf_size_v1 , rf_size_s1))
+            fig, axs = plt.subplots(1 , 2 , figsize=(9 , 9))
+            im = axs[0].imshow(mats['W_v1'], cm.inferno , vmin = 0.0 , vmax = 1.0)
+            #fig.colorbar(im, ax=axs[0], orientation='horizontal')
+            im2 = axs[1].imshow(mats['W_s1'], cm.inferno , vmin = 0.0 , vmax = 1.0)
+            #fig.colorbar(im2, ax=axs[1], orientation='horizontal')
+            fig.suptitle('theta: {0} , corr: {1}'.format(
+                                round(prms['corr_thres'],3) ,
+                                round(prms['spatio_temp_corr'],3)))
+            plt.savefig(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , 'weight_matrix.pdf'), bbox_inches='tight')
+            
+#%%
+accSTATS = numpy.array(accSTATSList)
+accSTATS = numpy.nan_to_num(accSTATS , nan = 1)
+#%%
+meanRate = 0.123
+meanVar = 0.107
+x_theory = numpy.linspace(0.0 , 1.0)
+%matplotlib inline
+#%% topo v1
+useID = ~numpy.isnan(accSTATS[: , 2])
+bin_means, x_edges , y_edges, binnumber = stats.binned_statistic_2d(accSTATS[useID,0] , accSTATS[useID , 1], accSTATS[: , 2] ,
+                                                            'mean', bins=11 , range=[[0.25 , 0.75],[0 , 1]])
+plt.figure(figsize=(4,4))
+plt.imshow(bin_means.T , cm.RdYlBu, aspect='auto', origin='lower' , extent=(0.25 , 0.75 , 0 , 1) , vmax=1)
+plt.plot(x_theory , (meanRate*x_theory - meanRate**2)/meanVar , c='r')
+
+plt.xlim([0.25 , 0.75])
+plt.xticks([0.25 , 0.5 , 0.75])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.xlabel('theta')
+plt.ylabel('V1 S1 correlation')
+plt.colorbar()
+plt.title('V1 topography')
+# =============================================================================
+# plt.savefig('raw_out/v1_topography.pdf', bbox_inches='tight')
+# =============================================================================
+#%% topo s1
+useID = ~numpy.isnan(accSTATS[: , 3])
+bin_means, x_edges , y_edges, binnumber = stats.binned_statistic_2d(accSTATS[useID,0] , accSTATS[useID , 1], accSTATS[: , 3] ,
+                                                            'mean', bins=11 , range=[[0.25 , 0.75],[0 , 1]])
+plt.figure(figsize=(4,4))
+plt.imshow(bin_means.T , cm.RdYlBu, aspect='auto', origin='lower' , extent=(0.25 , 0.75 , 0 , 1) , vmax=1)
+plt.plot(x_theory , (meanRate*x_theory - meanRate**2)/meanVar , c='r')
+
+plt.xlim([0.25 , 0.75])
+plt.xticks([0.25 , 0.5 , 0.75])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.xlabel('theta')
+plt.ylabel('V1 S1 correlation')
+plt.colorbar()
+plt.title('S1 topography')
+# =============================================================================
+# plt.savefig('raw_out/s1_topography.pdf', bbox_inches='tight')
+# =============================================================================
+#%% rf size v1
+useID = ~numpy.isnan(accSTATS[: , 11])
+bin_means, x_edges , y_edges, binnumber = stats.binned_statistic_2d(accSTATS[useID,0] ,
+                                                                    accSTATS[useID , 1],
+                                                                    accSTATS[: , 11] ,
+                                                            'mean', bins=11 , range=[[0.25 , 0.75],[0 , 1]])
+plt.figure(figsize=(4,4))
+plt.imshow(bin_means.T , cm.RdYlBu, aspect='auto', origin='lower' , extent=(0.25 , 0.75 , 0 , 1) , vmax=50)
+plt.plot(x_theory , (meanRate*x_theory - meanRate**2)/meanVar , c='r')
+plt.xlim([0.25 , 0.75])
+plt.xticks([0.25 , 0.5 , 0.75])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.xlabel('theta')
+plt.ylabel('V1 S1 correlation')
+plt.colorbar()
+plt.title('RF size V1')
+# =============================================================================
+# plt.savefig('raw_out/rf_size_v1.pdf', bbox_inches='tight')
+# =============================================================================
+#%% rf size s1
+useID = ~numpy.isnan(accSTATS[: , 12])
+bin_means, x_edges , y_edges, binnumber = stats.binned_statistic_2d(accSTATS[useID,0] ,
+                                                                    accSTATS[useID , 1],
+                                                                    accSTATS[: , 12] ,
+                                                            'mean', bins=11 , range=[[0.25 , 0.75],[0 , 1]])
+plt.figure(figsize=(4,4))
+plt.imshow(bin_means.T , cm.RdYlBu, aspect='auto', origin='lower' , extent=(0.25 , 0.75 , 0 , 1) , vmax=25)
+plt.plot(x_theory , (meanRate*x_theory - meanRate**2)/meanVar , c='r')
+plt.xlim([0.25 , 0.75])
+plt.xticks([0.25 , 0.5 , 0.75])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.xlabel('theta')
+plt.ylabel('V1 S1 correlation')
+plt.colorbar()
+plt.title('RF size S1')
+# =============================================================================
+# plt.savefig('raw_out/rf_size_s1.pdf', bbox_inches='tight')
+# =============================================================================
+#%% unimodal v1
+useID = ~numpy.isnan(accSTATS[: , 10])
+bin_means, x_edges , y_edges, binnumber = stats.binned_statistic_2d(accSTATS[useID,0] ,
+                                                                    accSTATS[useID , 1],
+                                                                    accSTATS[: , 10] ,
+                                                            'mean', bins=21 , range=[[0.25 , 0.75],[0 , 1]])
+plt.figure(figsize=(4,4))
+plt.imshow(bin_means.T , cm.copper, aspect='auto', origin='lower' , extent=(0.25 , 0.75 , 0 , 1) , vmin = -0.3 , vmax=1.0)
+plt.plot(x_theory , (meanRate*x_theory - meanRate**2)/meanVar , c='black' ,lw=2)
+plt.xlim([0.25 , 0.75])
+plt.xticks([0.25 , 0.5 , 0.75])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.xlabel('theta')
+plt.ylabel('V1 S1 correlation')
+plt.colorbar()
+plt.title('percentage bimodal')
+# =============================================================================
+# plt.savefig('raw_out/bimodal.pdf', bbox_inches='tight')
+# =============================================================================
+# =============================================================================
+# plt.close()
+# =============================================================================

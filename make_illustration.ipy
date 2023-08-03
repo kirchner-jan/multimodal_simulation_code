@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri May 14 16:19:38 2021
+
+@author: kirchnerj@MPIBR
+"""
+#%%
+import os, json , datetime , numpy , matplotlib
+import pylab as plt
+import matplotlib.cm as cm
+from tools.biased_weights import biased_weights
+from tools.runSimulation import runSimulation
+
+%matplotlib inline
+
+
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
+
+# defining things for the figures
+SMALL_SIZE = 12
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 16
+
+plt.rc('font',  size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes',  titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes',  labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend',  fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure',  titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+#%%
+def getPrmsMats():
+    # load all the other parameters from a text file
+    with open('parameters/parameters.txt') as f: prms = json.load(f)
+    # generate biased weight matrices
+    mats = dict()
+    mats['W_v1'] = biased_weights(prms['N_v1'], prms['W_initial_v1'], prms['bias_v1'], prms['spread_v1'])
+    mats['W_s1'] = biased_weights(prms['N_s1'], prms['W_initial_s1'], prms['bias_s1'], prms['spread_s1'])
+    return prms , mats
+#%%
+prms , mats = getPrmsMats()
+#%%
+
+prms['W_initial_v1'] = [0.4 , 0.6]
+prms['bias_v1'] = 0.1
+prms['spread_v1'] = 8
+prms['W_initial_s1'] = [0.4 , 0.6]
+prms['bias_s1'] = 0.1
+prms['spread_s1'] = 8
+
+mats['W_v1'] = biased_weights(prms['N_v1'], prms['W_initial_v1'], prms['bias_v1'], prms['spread_v1'])
+mats['W_s1'] = biased_weights(prms['N_s1'], prms['W_initial_s1'], prms['bias_s1'], prms['spread_s1'])
+#%%
+fig, axs = plt.subplots(1 , 2 , figsize=(9 , 9))
+im = axs[0].imshow(mats['W_v1'], cm.Greys , vmin = 0.0 , vmax = 1.0)
+fig.colorbar(im, ax=axs[0], orientation='horizontal')
+im2 = axs[1].imshow(mats['W_s1'], cm.Greys , vmin = 0.0 , vmax = 1.0)
+fig.colorbar(im2, ax=axs[1], orientation='horizontal')
+fig.savefig('raw_out/initial_weights.pdf', bbox_inches='tight')
+
+
+#%%
+prms['path'] = 'single_sim/'
+prms['path_main'] = prms['path'] + str(datetime.datetime.now()) + '_' + str(round(numpy.random.rand() , 5))
+os.makedirs(prms['path_main'] , exist_ok=True)
+#%%
+prms['logFlag'] = 1
+prms['corr_thres'] = 0.55
+prms['spatio_temp_corr'] = 0.2
+prms['total_ms'] = 1000
+prms['store_points'] = prms['total_ms']
+prms['L_p_v1'] = 150
+prms['L_p_s1'] = 150
+
+#%%
+numpy.random.seed(4200)
+
+time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl = runSimulation(prms , mats)
+#%%
+vec_v1 = numpy.array(vec_v1); vec_s1 = numpy.array(vec_s1); vec_rl = numpy.array(vec_rl)
+# =============================================================================
+# vec_v1[vec_v1 < 0.1] = numpy.nan; vec_s1[vec_s1 < 0.1] = numpy.nan; vec_rl[vec_rl < 0.1] = numpy.nan;
+# =============================================================================
+#%%
+fig, axs = plt.subplots(3 , figsize=(9 , 9))
+for ax , vec in zip(axs , [vec_v1 , vec_s1 , vec_rl/25.]):
+    for xx in numpy.arange(0 , vec.shape[1] , 2):
+        ax.plot(time_vec_list , xx + vec[: , xx , 0] , c='black')
+    ax.set_xlim([0 , 1000]); ax.set_xticks([0 , 500 , 1000]);
+    ax.set_ylim([0 , 50]); ax.set_yticks([0 , 50]);
+    
+plt.savefig('raw_out/initial_activity.pdf', bbox_inches='tight')
+#%%
+
+prms['W_initial_v1'] = [0.0 , 0.0]
+prms['bias_v1'] = 1
+prms['spread_v1'] = 4
+prms['W_initial_s1'] = [0.0 , 0.0]
+prms['bias_s1'] = 1
+prms['spread_s1'] = 4
+
+mats['W_v1'] = biased_weights(prms['N_v1'], prms['W_initial_v1'], prms['bias_v1'], prms['spread_v1'])
+mats['W_s1'] = biased_weights(prms['N_s1'], prms['W_initial_s1'], prms['bias_s1'], prms['spread_s1'])
+
+time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl = runSimulation(prms , mats)
+#%%
+vec_v1 = numpy.array(vec_v1); vec_s1 = numpy.array(vec_s1); vec_rl = numpy.array(vec_rl)
+# =============================================================================
+# vec_v1[vec_v1 < 0.1] = numpy.nan; vec_s1[vec_s1 < 0.1] = numpy.nan; vec_rl[vec_rl < 0.1] = numpy.nan;
+# =============================================================================
+
+#%%
+fig, axs = plt.subplots(3 , figsize=(9 , 9))
+for ax , vec in zip(axs , [vec_v1 , vec_s1 , vec_rl/8.]):
+    for xx in numpy.arange(0 , vec.shape[1] , 2):
+        ax.plot(time_vec_list , xx + vec[: , xx , 0] , c='black')
+    ax.set_xlim([0 , 1000]); ax.set_xticks([0 , 500 , 1000]);
+    ax.set_ylim([0 , 50]); ax.set_yticks([0 , 50]);
+plt.savefig('raw_out/final_activity.pdf', bbox_inches='tight')
+
+#%%
+fList = os.listdir('simulations/monte_carlo/')
+# =============================================================================
+# #%%
+# foldername = fList[30]
+# for filename in os.listdir('simulations/monte_carlo/' + foldername):
+#     if filename.endswith(".npy"): #  and (numpy.random.rand() < 0.05)
+#         print(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , filename))
+#         time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl = numpy.load(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , filename) , allow_pickle=True)
+# =============================================================================
+
+        
+        # plt.savefig(os.path.join(os.path.join('simulations/monte_carlo/', foldername) , 'weight_matrix.pdf'), bbox_inches='tight')
+
+#%%
+prms , mats = getPrmsMats()
+# set the output path
+prms['path'] = 'simulations/single_run/'
+prms['path_main'] = prms['path'] + str(datetime.datetime.now()) + '_' + str(round(numpy.random.rand() , 5))
+os.makedirs(prms['path_main'] , exist_ok=True)
+# Monte Carlo sample parameters
+prms['corr_thres'] = 0.55 # numpy.random.uniform(low=0.25,high=0.75) # 0.5 #
+prms['spatio_temp_corr'] = 0.5 # numpy.random.uniform(low=0.0,high=1.0)
+prms['logFlag'] = 1
+prms['total_ms'] = 400000
+prms['store_points'] = 1000.0
+
+# run the simulation
+time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl = runSimulation(prms , mats)
+#%%
+fig, axs = plt.subplots(5 , 2 , figsize=(9 , 9))
+for xx in numpy.arange(5):
+    im = axs[xx , 0].imshow(W_vec_v1[xx*249 , : , :].squeeze(), cm.Reds , vmin = 0.0 , vmax = 1.0)
+    im2 = axs[xx , 1].imshow(W_vec_s1[xx*249 , : , :].squeeze(), cm.Blues , vmin = 0.0 , vmax = 1.0)
+fig.suptitle('theta: {0} , corr: {1}'.format(
+                    round(prms['corr_thres'],3) ,
+                    round(prms['spatio_temp_corr'],3)))
+#%%
+simOutput = time_vec_list, W_vec_v1, W_vec_s1 , prms , mats , vec_v1 , vec_s1 , vec_rl
+numpy.save(prms['path_main'] + '/simOutput_' + str(round(numpy.random.rand() , 5)) +'.npy' , simOutput)
+#%%
+fig.savefig('raw_out/final_weight.pdf', bbox_inches='tight')
+#%%
+plt.figure(figsize=(5,5))
+plt.plot(time_vec_list/60/60/24 , W_vec_v1[: , 0 , :].squeeze() , c='r')
+plt.plot(time_vec_list/60/60/24 , W_vec_s1[: , 0 , :].squeeze() , c='b')
+plt.xlim([0 , 5.0]); plt.xticks([0 , 2.5 , 5]); plt.xlabel('time (days)')
+plt.ylim([0 , 1]); plt.yticks([0 , 0.5 , 1]); plt.ylabel('weight')
+plt.savefig('raw_out/weight_trajectory_bimodal.pdf', bbox_inches='tight')
+#%%
+plt.figure(figsize=(5,5))
+plt.plot(time_vec_list/60/60/24 , W_vec_v1[: , 3 , :].squeeze() , c='r')
+plt.plot(time_vec_list/60/60/24 , W_vec_s1[: , 3 , :].squeeze() , c='b')
+plt.xlim([0 , 5.0]); plt.xticks([0 , 2.5 , 5]); plt.xlabel('time (days)')
+plt.ylim([0 , 1]); plt.yticks([0 , 0.5 , 1]); plt.ylabel('weight')
+plt.savefig('raw_out/weight_trajectory_unimodal.pdf', bbox_inches='tight')
+
+
+# =============================================================================
+# #%%
+# plt.figure(figsize=(10 , 3))
+# plt.imshow(vec_v1.squeeze().T[: , 0:1000], cm.Greys , aspect='auto', origin='lower' , vmax=1 , interpolation='none')
+# plt.xlim([0 , 1000])
+# plt.xticks([0 , 500 , 1000])
+# plt.xlim([0 , 1000]); plt.xticks([0 , 500 , 1000]);
+# plt.ylim([0 , 50]); plt.yticks([0 , 50]);
+# 
+# #%%
+# plt.figure(figsize=(10 , 3))
+# plt.imshow(vec_s1.squeeze().T[: , 0:1000], cm.Greys , aspect='auto', origin='lower' , vmax=1 , interpolation='none' )
+# plt.xlim([0 , 1000]); plt.xticks([0 , 500 , 1000]);
+# plt.ylim([0 , 50]); plt.yticks([0 , 50]);
+# 
+# =============================================================================
+#%%
+# =============================================================================
+# 
+# plt.figure()
+# plt.plot(time_vec_list[::50] , W_vec_s1[::50 , : , 0] , c='r')
+# plt.plot(time_vec_list[::50] , W_vec_v1[::50 , : , 0] , c='b')
+# plt.legend()
+# #plt.xlim([0 , 100000])
+# plt.show()
+# =============================================================================
+
+#%%
+# =============================================================================
+# import matplotlib.cm as cm
+# import matplotlib.animation as animation
+# 
+# frames = [] # for storing the generated images
+# fig = plt.figure()
+# for i in numpy.arange(0 , W_vec_v1.shape[0] , int(W_vec_v1.shape[0]/100)):
+#     frames.append([plt.imshow(numpy.concatenate((W_vec_v1[i,:,:] , W_vec_s1[i,:,:]) , axis = 1 ), cmap=cm.Greys_r,animated=True , vmin = prms['W_thres'][0] , vmax = prms['W_thres'][1]  ) ])
+# 
+# ani = animation.ArtistAnimation(fig, frames, interval=10, blit=True,
+#                                 repeat_delay=1000)
+# ani.save('movie.mp4')
+# plt.show()
+# =============================================================================
+
+# %%

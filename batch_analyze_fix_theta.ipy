@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri May 14 09:19:44 2021
+
+@author: kirchnerj@MPIBR
+"""
+
+import numpy , os , matplotlib , random
+from scipy import stats
+import pylab as plt
+import matplotlib.cm as cm
+from tools.biased_weights import biased_weights
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
+# defining things for the figures
+SMALL_SIZE = 12
+MEDIUM_SIZE = 14.
+BIGGER_SIZE = 16
+
+plt.rc('font',  size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes',  titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes',  labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick',  labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend',  fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure',  titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+#%%
+N = 50
+V1template = biased_weights(N, [0 , 0], 1, 8)
+S1template = biased_weights(N, [0 , 0], 1, 8)
+simName = 'fix_theta'
+%matplotlib inline
+accSTATSList = []
+for foldername in numpy.sort(os.listdir('simulations/' + simName + '/')):
+    for filename in os.listdir('simulations/' + simName + '/' + foldername):
+        if filename.endswith(".npy"): #  and (numpy.random.rand() < 0.05)
+            print(os.path.join(os.path.join('simulations/' + simName + '/', foldername) , filename))
+            time_vec_list, W_vec_v1, W_vec_s1, prms, mats, vec_v1, vec_s1, vec_rl = numpy.load(
+                os.path.join(os.path.join('simulations/' + simName + '/', foldername), filename), allow_pickle=True)
+            cMat = numpy.corrcoef(mats['W_s1'].ravel() , mats['W_v1'].ravel())
+            cMatV1 = numpy.corrcoef(mats['W_v1'].ravel() , V1template.ravel())
+            cMatS1 = numpy.corrcoef(mats['W_s1'].ravel() , S1template.ravel())
+            bimodal = ((mats['W_s1'] > 0.2).sum(axis=1) > 0) * ((mats['W_v1'] > 0.5).sum(axis=1) > 0)
+            accSTATSList.append((prms['corr_thres'] , prms['spatio_temp_corr'] , cMat[0,1] , cMatV1[0,1] , cMatS1[0,1], bimodal.mean() , mats['W_v1'] , mats['W_s1']) )
+#%%
+accSTATS = numpy.array(accSTATSList)
+accSTATS = numpy.nan_to_num(accSTATS , nan = 1)
+#%%
+meanRate = 0.123
+meanVar = 0.107
+x_theory = 0.5
+#y_theory = (meanRate*x_theory - meanRate**2)/meanVar
+y_theory = (x_theory - meanRate)
+#%%
+initBiasMat = biased_weights(prms['N_v1'], prms['W_initial_v1'], prms['bias_v1'], prms['spread_v1'])
+initCMat = numpy.corrcoef(initBiasMat.ravel() , V1template.ravel())
+initScore = initCMat[0,1]
+
+
+#%%
+%matplotlib inline
+#%%
+plt.figure()
+plt.imshow(V1template, cm.Greys , vmin = 0.0 , vmax = 1.0)
+plt.savefig('raw_out/template_V1.pdf', bbox_inches='tight')
+#%%
+plt.figure()
+plt.imshow(initBiasMat, cm.Greys , vmin = 0.0 , vmax = 1.0)
+plt.savefig('raw_out/initial_V1.pdf', bbox_inches='tight')
+#%%
+r = numpy.array([accSTATS[:,3].argmax() , 
+                 numpy.where(numpy.abs(accSTATS[:,3] - numpy.median(accSTATS[:,3])) < 0.01)[0][0] ,
+                 numpy.where(numpy.abs(accSTATS[:,3] - numpy.nanmean(accSTATS[:,3])) < 0.01)[0][0] ,
+                 22])
+plt.figure(figsize=(10,20))
+for xx in range(4):
+    plt.subplot(421 + 2*xx)
+    plt.imshow(accSTATS[r[xx],6], cmap=cm.Reds , vmin = 0 , vmax = 1.2); plt.axis('off')
+    plt.title(str(round(accSTATS[r[xx],3],3)) + ' and ' + str(round(accSTATS[r[xx],1],3)))
+    plt.subplot(421 + 2*xx + 1)
+    plt.imshow(accSTATS[r[xx],7], cmap=cm.Blues , vmin = 0. , vmax = 1.2); plt.axis('off')
+    plt.title(str(round(accSTATS[r[xx],4],3)) + ' and ' + str(round(accSTATS[r[xx],1],3)))
+plt.savefig('raw_out/sample_pairs.pdf', bbox_inches='tight')
+
+#%%
+useID = ~numpy.isnan(numpy.array(accSTATS[: , 5], dtype=float))
+bin_means, bin_edges, binnumber = stats.binned_statistic(numpy.array(accSTATS[useID,1], dtype=float) ,
+                                                     numpy.array(accSTATS[useID,5], dtype=float) ,
+                                                            'median', bins=10 )
+plt.figure(figsize=(4,4))
+sc = plt.scatter(accSTATS[:,1] , accSTATS[: , 5])
+plt.plot(bin_edges[:-1] + numpy.diff(bin_edges)[0]/2 , bin_means , c='r')
+plt.plot([y_theory , y_theory] , [0 , 1], c='r')
+
+plt.xlim([0 , 1])
+plt.xticks([0.0 , 0.5 , 1.0])
+plt.ylim([0.0 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.ylabel('fraction bimodal')
+plt.xlabel('V1 S1 correlation')
+plt.savefig('raw_out/fraction_bimodal.pdf', bbox_inches='tight')
+#%%
+useID = ~numpy.isnan(numpy.array(accSTATS[: , 3], dtype=float))
+bin_means, bin_edges, binnumber = stats.binned_statistic(numpy.array(accSTATS[useID,1], dtype=float) ,
+                                                     numpy.array(accSTATS[useID,3], dtype=float) ,
+                                                            'mean', bins=10 )
+plt.figure(figsize=(4,4))
+allMat = numpy.array([numpy.concatenate((accSTATS[:,1] ,accSTATS[:,1] )) , 
+                      numpy.concatenate((accSTATS[:,3] ,accSTATS[:,4] )) , 
+                      numpy.concatenate((numpy.zeros(accSTATS.shape[0]) ,numpy.ones(accSTATS.shape[0]) ))])
+numpy.transpose(numpy.random.shuffle(numpy.transpose(allMat)))
+sc = plt.scatter(allMat[0,:] , allMat[1,:] , c=allMat[2,:])
+plt.plot(bin_edges[:-1]+ numpy.diff(bin_edges)[0]/2 , bin_means , c='r')
+plt.plot([0 , 1] , [initScore , initScore])
+plt.xlim([0 , 1])
+plt.xticks([0.0 , 0.5 , 1.0])
+plt.ylim([-0.25 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.ylabel('score')
+plt.xlabel('V1 S1 correlation')
+plt.savefig('raw_out/quality_vs_correlation.pdf', bbox_inches='tight')
+#%%
+useID = ~numpy.isnan(numpy.array(accSTATS[: , 2], dtype=float))
+bin_means, bin_edges, binnumber = stats.binned_statistic(numpy.array(accSTATS[useID,1], dtype=float) ,
+                                                     numpy.array(accSTATS[useID,2], dtype=float) ,
+                                                            'median', bins=10 )
+plt.figure(figsize=(4,4))
+sc = plt.scatter(accSTATS[:,1] , accSTATS[: , 2])
+plt.plot(bin_edges[:-1] + numpy.diff(bin_edges)[0]/2 , bin_means , c='r')
+plt.xlim([0 , 1])
+plt.xticks([0.0 , 1.0])
+plt.ylim([-1 , 1.0])
+plt.yticks([-1 ,  1.0])
+plt.ylabel('alignment')
+plt.xlabel('V1 S1 correlation')
+plt.savefig('raw_out/V1S1alignment.pdf', bbox_inches='tight')
+
+
+#%%
+plt.figure(figsize=(4,4))
+ax = plt.subplot()
+sc = plt.scatter(accSTATS[:,3] , accSTATS[: , 4] , c=accSTATS[: , 1] ,cmap=cm.magma , vmin = 0.0 , vmax = 1.0 )
+plt.xlim([-0.25 , 1])
+plt.xticks([ 0.0 , 0.5 , 1.0])
+plt.ylim([-0.25 , 1.0])
+plt.yticks([0. , 0.5 , 1.0])
+plt.ylabel('S1 quality')
+plt.xlabel('V1 quality')
+
+divider = make_axes_locatable(ax)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+
+plt.colorbar(sc, cax=cax)
+
+
+plt.savefig('raw_out/RF_quality.pdf', bbox_inches='tight')
